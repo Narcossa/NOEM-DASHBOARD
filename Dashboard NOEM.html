@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NOEM Dashboard — Heures par client</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <script src="https://www.gstatic.com/charts/loader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      background: #0b0f14;
+      color: #fff;
+      font-family: "Inter", system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px;
+    }
+    h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+    .controls {
+      margin: 20px 0;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+    }
+    select, button {
+      background: #121821;
+      color: #fff;
+      border: 1px solid rgba(255,255,255,.2);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 14px;
+    }
+    button {
+      background: #3b82f6;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      filter: brightness(1.1);
+    }
+    #chart {
+      width: 100%;
+      max-width: 900px;
+      height: 500px;
+      margin-top: 20px;
+    }
+    .footer {
+      margin-top: 30px;
+      color: #9ca3af;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <h1>📊 NOEM — Heures par client</h1>
+  <div class="controls">
+    <select id="collab"><option value="__ALL__">Tous les collaborateurs</option></select>
+    <button onclick="loadExcel()">🔄 Rafraîchir</button>
+  </div>
+  <div id="chart"></div>
+  <div class="footer">Source : fichier Excel OneDrive partagé — actualisation manuelle 🔄</div>
+
+  <script>
+    // 🔗 Ton lien direct OneDrive :
+    const DATA_URL = "https://onedrive.live.com/:x:/g/personal/6ACD3667865818A6/ESHIud6fythNiyqtw-4EeYQBAysG7F7rvw-Ri3W87BVPWw?resid=6ACD3667865818A6!sdeb9c821ca9f4dd88b2aadc3ee047984&ithint=file%2Cxlsx&e=FKke1B&migratedtospo=true&redeem=aHR0cHM6Ly8xZHJ2Lm1zL3gvYy82YWNkMzY2Nzg2NTgxOGE2L0VTSEl1ZDZmeXRoTml5cXR3LTRFZVlRQkF5c0c3RjdydnctUmkzVzg3QlZQV3c_ZT1GS2tlMUI&download=1";
+
+    google.charts.load("current", { packages:["corechart"] });
+
+    async function loadExcel(){
+      try {
+        const res = await fetch(DATA_URL);
+        if(!res.ok) throw new Error("Impossible de charger le fichier OneDrive");
+        const ab = await res.arrayBuffer();
+        const wb = XLSX.read(ab, { type: "array" });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json(sheet);
+        drawChart(data);
+      } catch (e) {
+        alert("Erreur : " + e.message);
+      }
+    }
+
+    function drawChart(data){
+      const collabSelect = document.getElementById("collab");
+      const selected = collabSelect.value;
+
+      const filtered = selected === "__ALL__" ? data : data.filter(r => r.Collaborateur === selected);
+      const clients = {};
+      filtered.forEach(r => {
+        const client = r.Client;
+        const heures = parseFloat(r.Heures) || 0;
+        if(client) clients[client] = (clients[client] || 0) + heures;
+      });
+
+      const arr = Object.entries(clients);
+      const total = arr.reduce((s,[,h]) => s + h, 0);
+
+      document.title = `NOEM Dashboard (${total.toFixed(1)} h)`;
+
+      const chartData = new google.visualization.DataTable();
+      chartData.addColumn("string", "Client");
+      chartData.addColumn("number", "Heures");
+      chartData.addRows(arr);
+
+      const chart = new google.visualization.PieChart(document.getElementById("chart"));
+      chart.draw(chartData, {
+        title: selected === "__ALL__" ? "Tous les collaborateurs" : selected,
+        backgroundColor: "transparent",
+        legend: { textStyle: { color: "#fff" } },
+        titleTextStyle: { color: "#fff" },
+        pieHole: 0.35
+      });
+
+      // Actualise la liste des collaborateurs
+      const collabs = [...new Set(data.map(r => r.Collaborateur))].filter(Boolean);
+      collabSelect.innerHTML = `<option value="__ALL__">Tous les collaborateurs</option>` +
+        collabs.map(c => `<option ${c === selected ? "selected" : ""}>${c}</option>`).join("");
+      collabSelect.onchange = () => drawChart(data);
+    }
+
+    google.charts.setOnLoadCallback(loadExcel);
+  </script>
+</body>
+</html>
